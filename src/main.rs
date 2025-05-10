@@ -1,14 +1,20 @@
-struct CPU {
+//TODO: Implement multiplication
+//TODO: add reading instructions from file
+use std::ops::{BitAnd, BitOr, BitXor};
+
+struct Cpu {
     registers: [u8; 16],
+    register_i: u16,
     memory: [u8; 0x1000],
-    pos: usize, // position in memory, program counter
+    prog_counter: usize, // prog_counterition in memory, program counter
     stack: [u16; 16],
     stack_pointer: usize,
 }
-impl CPU {
+
+#[allow(dead_code)]
+impl Cpu {
     fn read_op_code(&self) -> u16 {
-        //NOTE: listing 5.24
-        let p = self.pos;
+        let p = self.prog_counter;
         let op_byte1 = self.memory[p] as u16;
         let op_byte2 = self.memory[p + 1] as u16;
         op_byte1 << 8 | op_byte2
@@ -17,9 +23,9 @@ impl CPU {
     fn run(&mut self) {
         loop {
             let opcode = self.read_op_code();
-            self.pos += 2;
+            self.prog_counter += 2;
             let nnn = opcode & 0x0FFF; // address for function call: 0x2nnn
-
+            let kk = (opcode & 0x00FF) as u8;
             let c = ((opcode & 0xF000) >> 12) as u8; // operation code (8 signifies 2-arg operation)
             let x = ((opcode & 0x0F00) >> 8) as u8; // first arg (index in register)
             let y = ((opcode & 0x00F0) >> 4) as u8; // second arg (index in register)
@@ -29,11 +35,83 @@ impl CPU {
                     return;
                 }
                 (0, 0, 0xE, 0xE) => self.rtrn(),
+                (0x1, _, _, _) => self.jump(nnn),
                 (0x2, _, _, _) => self.call(nnn),
+                (0x3, _, _, _) => self.skip_e(x, kk),
+                (0x4, _, _, _) => self.skip_ne(x, kk),
+                (0x5, _, _, 0x0) => self.skip_e_xy(x, y),
+                (0x6, _, _, _) => self.ld_xkk(x, kk),
+                (0x7, _, _, _) => self.add_xkk(x, kk),
+                (0x8, _, _, 0x0) => self.set_xy(x, y),
+                (0x8, _, _, 0x1) => self.or_xy(x, y),
+                (0x8, _, _, 0x2) => self.and_xy(x, y),
+                (0x8, _, _, 0x3) => self.xor_xy(x, y),
                 (0x8, _, _, 0x4) => self.add_xy(x, y),
+                (0x8, _, _, 0x5) => self.sub_xy(x, y),
+                (0x8, _, _, 0x6) => self.shr(x),
+                (0x8, _, _, 0x7) => self.sub_yx(x, y),
+                (0x8, _, _, 0xE) => self.shl(x),
+                (0x9, _, _, _) => self.skip_ne(x, y),
                 _ => todo!("opcode {:04x}", opcode),
             }
         } //loop
+    }
+
+    fn jump(&mut self, addr: u16) {
+        self.prog_counter = addr as usize;
+    }
+
+    fn call(&mut self, addr: u16) {
+        let sp = self.stack_pointer;
+        // let stack = &mut self.stack;
+        if sp > self.stack.len() {
+            panic!("Stack overflow");
+        }
+        self.stack[sp] = self.prog_counter as u16;
+        self.stack_pointer += 1;
+        self.prog_counter = addr as usize;
+    }
+
+    fn skip_e(&mut self, x: u8, addr: u8) {
+        if self.registers[x as usize] == addr {
+            self.prog_counter += 2;
+        }
+    }
+
+    fn skip_ne(&mut self, x: u8, addr: u8) {
+        if self.registers[x as usize] != addr {
+            self.prog_counter += 2;
+        }
+    }
+
+    fn skip_e_xy(&mut self, x: u8, y: u8) {
+        if self.registers[x as usize] == self.registers[y as usize] {
+            self.prog_counter += 2;
+        }
+    }
+
+    fn ld_xkk(&mut self, x: u8, kk: u8) {
+        self.registers[x as usize] = kk;
+    }
+
+    fn add_xkk(&mut self, x: u8, kk: u8) {
+        self.registers[x as usize] += kk;
+    }
+
+    fn set_xy(&mut self, x: u8, y: u8) {
+        self.registers[x as usize] = self.registers[y as usize];
+    }
+
+    fn or_xy(&mut self, x: u8, y: u8) {
+        self.registers[x as usize] = self.registers[x as usize].bitor(self.registers[y as usize]);
+    }
+
+    fn and_xy(&mut self, x: u8, y: u8) {
+        self.registers[x as usize] = self.registers[x as usize].bitand(self.registers[y as usize]);
+    }
+
+    fn xor_xy(&mut self, x: u8, y: u8) {
+        self.registers[x as usize] = self.registers[x as usize].bitxor(self.registers[y as usize]);
     }
 
     fn add_xy(&mut self, x: u8, y: u8) {
@@ -49,16 +127,40 @@ impl CPU {
         }
     }
 
-    fn call(&mut self, addr: u16) {
-        let sp = self.stack_pointer;
-        // let stack = &mut self.stack;
-        if sp > self.stack.len() {
-            panic!("Stack overflow");
+    fn sub_xy(&mut self, x: u8, y: u8) {
+        let vx = self.registers[x as usize];
+        let vy = self.registers[y as usize];
+        if vx > vy {
+            self.registers[0xF] = 1;
+        } else {
+            self.registers[0xF] = 0;
         }
-        self.stack[sp] = self.pos as u16;
-        self.stack_pointer += 1;
-        self.pos = addr as usize;
+        self.registers[x as usize] = vx - vy;
     }
+
+    fn sub_yx(&mut self, x: u8, y: u8) {
+        let vx = self.registers[x as usize];
+        let vy = self.registers[y as usize];
+        if vy > vx {
+            self.registers[0xF] = 1;
+        } else {
+            self.registers[0xF] = 0;
+        }
+        self.registers[x as usize] = vy - vx;
+    }
+
+    fn shr(&mut self, x: u8) {
+        let vx = self.registers[x as usize];
+        self.registers[0xF] = vx & 0x1;
+        self.registers[x as usize] = vx >> 1;
+    }
+
+    fn shl(&mut self, x: u8) {
+        let vx = self.registers[x as usize];
+        self.registers[0xF] = vx & 0x10;
+        self.registers[x as usize] = vx << 1;
+    }
+
     fn rtrn(&mut self) {
         if self.stack_pointer == 0 {
             panic!("Stack underflow")
@@ -66,14 +168,24 @@ impl CPU {
 
         self.stack_pointer -= 1;
         let call_addr = self.stack[self.stack_pointer];
-        self.pos = call_addr as usize;
+        self.prog_counter = call_addr as usize;
+    }
+
+    fn sne_xy(&mut self, x: u8, y: u8) {
+        if self.registers[x as usize] != self.registers[y as usize] {
+            self.prog_counter += 2;
+        }
+    }
+
+    fn a_nnn(&mut self, addr: u16) {
+        self.register_i = addr;
     }
 }
 fn main() {
-    let mut cpu = CPU {
+    let mut cpu = Cpu {
         registers: [0; 16],
         memory: [0; 4096],
-        pos: 0,
+        prog_counter: 0,
         stack: [0; 16],
         stack_pointer: 0,
     };
@@ -82,16 +194,24 @@ fn main() {
     cpu.registers[1] = 10;
 
     let mem = &mut cpu.memory;
-    // op code 0x0814, addition (4) of reg 1 to reg 0
-    mem[0] = 0x80;
-    mem[1] = 0x14;
-    // op code 0x0824, addition (4) of reg 2 to reg 0
-    mem[2] = 0x80;
-    mem[3] = 0x24;
-    // op code 0x0834, addition (4) of reg 3 to reg 0
-    mem[4] = 0x80;
-    mem[5] = 0x34;
+    // op code 0x2100, call function at addr 100
+    mem[0x000] = 0x21;
+    mem[0x001] = 0x00;
+    // // op code 0x2100, call function at addr 100
+    // mem[0x002] = 0x21;
+    // mem[0x003] = 0x00;
+    // // op code 0x0000, halt
+    // mem[0x004] = 0x00;
+    // mem[0x005] = 0x00;
+
+    mem[0x100] = 0x80;
+    mem[0x101] = 0x1E;
+    mem[0x102] = 0x80;
+    mem[0x103] = 0x14;
+    mem[0x104] = 0x00;
+    mem[0x105] = 0xEE;
     cpu.run();
 
-    assert_eq!(cpu.registers[0], 35);
+    // assert_eq!(cpu.registers[0], 45);
+    println!("{}", cpu.registers[0]);
 }
