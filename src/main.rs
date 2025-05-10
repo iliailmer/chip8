@@ -1,6 +1,5 @@
 //TODO: Implement multiplication
-//TODO: add reading instructions from file
-use rand::{prelude::*, rng};
+use rand::prelude::*;
 use std::ops::{BitAnd, BitOr, BitXor};
 struct Cpu {
     registers: [u8; 16],
@@ -11,7 +10,7 @@ struct Cpu {
     stack_pointer: usize,
 }
 
-#[allow(dead_code)]
+#[allow(dead_code, unused_variables)]
 impl Cpu {
     fn read_op_code(&self) -> u16 {
         let p = self.prog_counter;
@@ -21,8 +20,6 @@ impl Cpu {
     }
 
     fn run(&mut self) {
-        let mut rng = rand::rng();
-
         loop {
             let opcode = self.read_op_code();
             self.prog_counter += 2;
@@ -175,7 +172,7 @@ impl Cpu {
 
     fn shl(&mut self, x: u8) {
         let vx = self.registers[x as usize];
-        self.registers[0xF] = vx & 0x10;
+        self.registers[0xF] = (vx >> 7) & 0x1;
         self.registers[x as usize] = vx << 1;
     }
 
@@ -204,7 +201,8 @@ impl Cpu {
     }
 
     fn c_xkk(&mut self, x: u8, kk: u8) {
-        let random_byte = rng().random_range(0..255);
+        let mut rng = rand::rng();
+        let random_byte = rng.random_range(0..255);
         self.registers[x as usize] = random_byte.bitand(kk);
     }
 
@@ -280,4 +278,5 @@ fn main() {
 
     // assert_eq!(cpu.registers[0], 45);
     println!("{}", cpu.registers[0]);
+    println!("{}", cpu.registers[0xF]);
 }
