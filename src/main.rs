@@ -1,7 +1,7 @@
 //TODO: Implement multiplication
 //TODO: add reading instructions from file
+use rand::{prelude::*, rng};
 use std::ops::{BitAnd, BitOr, BitXor};
-
 struct Cpu {
     registers: [u8; 16],
     register_i: u16,
@@ -21,6 +21,8 @@ impl Cpu {
     }
 
     fn run(&mut self) {
+        let mut rng = rand::rng();
+
         loop {
             let opcode = self.read_op_code();
             self.prog_counter += 2;
@@ -52,6 +54,22 @@ impl Cpu {
                 (0x8, _, _, 0x7) => self.sub_yx(x, y),
                 (0x8, _, _, 0xE) => self.shl(x),
                 (0x9, _, _, _) => self.skip_ne(x, y),
+                (0xA, _, _, _) => self.a_nnn(nnn),
+                (0xB, _, _, _) => self.b_nnn(nnn),
+                (0xC, _, _, _) => self.c_xkk(x, kk),
+                (0xD, _, _, _) => self.d_xyn(x, y, d),
+                (0xE, _, 0x9, 0xE) => self.e_x9e_skip_pressed_x(x),
+                (0xE, _, 0xA, 0x1) => self.e_xa1_skip_npressed_x(x),
+                (0xF, _, 0x0, 0x7) => self.f_x07_set_delay_x(x),
+                (0xF, _, 0x0, 0xA) => self.wait_keypress_x(x),
+                (0xF, _, 0x1, 0x5) => self.set_delay_timer(x),
+                (0xF, _, 0x1, 0x8) => self.set_sound_timer(x),
+                (0xF, _, 0x1, 0xE) => self.add_i_x(x),
+                (0xF, _, 0x2, 0x9) => self.fx29_set_i_sprite(x),
+                (0xF, _, 0x3, 0x3) => self.fx33(x),
+                (0xF, _, 0x5, 0x5) => self.fx55(x),
+                (0xF, _, 0x6, 0x5) => self.fx65(x),
+                // NOTE: skipping drawing instructions
                 _ => todo!("opcode {:04x}", opcode),
             }
         } //loop
@@ -177,13 +195,61 @@ impl Cpu {
         }
     }
 
-    fn a_nnn(&mut self, addr: u16) {
-        self.register_i = addr;
+    fn a_nnn(&mut self, nnn: u16) {
+        self.register_i = nnn;
+    }
+
+    fn b_nnn(&mut self, nnn: u16) {
+        self.prog_counter = (self.registers[0] as u16 + nnn) as usize;
+    }
+
+    fn c_xkk(&mut self, x: u8, kk: u8) {
+        let random_byte = rng().random_range(0..255);
+        self.registers[x as usize] = random_byte.bitand(kk);
+    }
+
+    fn d_xyn(&mut self, x: u8, y: u8, n: u8) {
+        todo!("Not Implemented")
+    }
+    fn e_x9e_skip_pressed_x(&mut self, x: u8) {
+        todo!("Not implemented")
+    }
+    fn e_xa1_skip_npressed_x(&mut self, x: u8) {
+        todo!("Not implemented")
+    }
+    fn f_x07_set_delay_x(&mut self, x: u8) {
+        todo!("Not implemented")
+    }
+    fn wait_keypress_x(&mut self, x: u8) {
+        todo!("Not implemented")
+    }
+    fn set_delay_timer(&mut self, x: u8) {
+        todo!("Not implemented")
+    }
+    fn set_sound_timer(&mut self, x: u8) {
+        todo!("Not implemented")
+    }
+    fn add_i_x(&mut self, x: u8) {
+        todo!("Not implemented")
+    }
+    fn fx29_set_i_sprite(&mut self, x: u8) {
+        todo!("Not implemented")
+    }
+    fn fx33(&mut self, x: u8) {
+        todo!("Not implemented")
+    }
+    fn fx55(&mut self, x: u8) {
+        todo!("Not implemented")
+    }
+    fn fx65(&mut self, x: u8) {
+        todo!("Not implemented")
     }
 }
+
 fn main() {
     let mut cpu = Cpu {
         registers: [0; 16],
+        register_i: 0,
         memory: [0; 4096],
         prog_counter: 0,
         stack: [0; 16],
